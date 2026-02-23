@@ -387,6 +387,40 @@
             width: 100%;
         }
 
+        /* Game info display */
+        .game-info-display {
+            text-align: center;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+            opacity: 0.8;
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            padding: 0.5rem 1rem;
+            border-radius: 15px;
+            display: inline-block;
+        }
+
+        /* AI thinking animation */
+        .ai-thinking {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        /* Disable board during AI turn */
+        .board.ai-turn {
+            pointer-events: none;
+            opacity: 0.8;
+        }
+
+        .board.ai-turn .cell {
+            cursor: not-allowed;
+        }
+
         @media (max-width: 768px) {
             .player-inputs {
                 flex-direction: column;
@@ -487,6 +521,25 @@
                         </select>
                     </div>
                 </div>
+
+                <!-- Game Mode Selection -->
+                <div class="config-row" style="margin-top: 1.5rem;">
+                    <div class="config-item">
+                        <label for="game-mode">Game Mode</label>
+                        <select id="game-mode" onchange="toggleAISettings()">
+                            <option value="human-vs-human" selected>Human vs Human</option>
+                            <option value="human-vs-computer">Human vs Computer</option>
+                        </select>
+                    </div>
+                    <div class="config-item" id="ai-difficulty-container" style="display: none;">
+                        <label for="ai-difficulty">AI Difficulty</label>
+                        <select id="ai-difficulty">
+                            <option value="easy">Easy</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="hard">Hard</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
             <!-- Player Names -->
@@ -495,8 +548,8 @@
                     <label for="player1-name">Player 1 (Red)</label>
                     <input type="text" id="player1-name" placeholder="Enter name" maxlength="12" value="Player 1">
                 </div>
-                <div class="player-input">
-                    <label for="player2-name">Player 2 (Yellow)</label>
+                <div class="player-input" id="player2-input">
+                    <label for="player2-name" id="player2-label">Player 2 (Yellow)</label>
                     <input type="text" id="player2-name" placeholder="Enter name" maxlength="12" value="Player 2">
                 </div>
             </div>
@@ -520,6 +573,10 @@
         </div>
 
         <main>
+            <div class="game-info-display" id="game-info-display" style="display: none;">
+                <span id="board-info">7×6 Board | Connect 4</span>
+            </div>
+
             <div class="status" id="game-status" style="display: none;">
                 <span class="current-player" id="status">Player 1's Turn</span>
             </div>
@@ -540,6 +597,29 @@
         let boardWidth = 7;
         let boardHeight = 6;
         let winLength = 4;
+        let gameMode = 'human-vs-human'; // 'human-vs-human' or 'human-vs-computer'
+        let aiDifficulty = 'medium'; // 'easy', 'medium', 'hard'
+        let isAIThinking = false;
+
+        // Toggle AI settings visibility
+        function toggleAISettings() {
+            const gameMode = document.getElementById('game-mode').value;
+            const aiContainer = document.getElementById('ai-difficulty-container');
+            const player2Label = document.getElementById('player2-label');
+            const player2Input = document.getElementById('player2-name');
+
+            if (gameMode === 'human-vs-computer') {
+                aiContainer.style.display = 'block';
+                player2Label.textContent = 'Computer Name (Yellow)';
+                player2Input.value = 'Computer';
+                player2Input.placeholder = 'AI name';
+            } else {
+                aiContainer.style.display = 'none';
+                player2Label.textContent = 'Player 2 (Yellow)';
+                player2Input.value = 'Player 2';
+                player2Input.placeholder = 'Enter name';
+            }
+        }
 
         // Start new game
         function startNewGame() {
@@ -547,6 +627,8 @@
             boardWidth = parseInt(document.getElementById('board-width').value);
             boardHeight = parseInt(document.getElementById('board-height').value);
             winLength = parseInt(document.getElementById('win-length').value);
+            gameMode = document.getElementById('game-mode').value;
+            aiDifficulty = document.getElementById('ai-difficulty').value;
 
             // Validate configuration
             if (!validateGameConfig()) {
@@ -555,7 +637,15 @@
 
             // Get player names
             const p1Name = document.getElementById('player1-name').value.trim() || 'Player 1';
-            const p2Name = document.getElementById('player2-name').value.trim() || 'Player 2';
+            let p2Name = document.getElementById('player2-name').value.trim();
+
+            if (gameMode === 'human-vs-computer') {
+                p2Name = p2Name || 'Computer';
+                // Add difficulty indicator
+                p2Name += ` (${aiDifficulty.charAt(0).toUpperCase() + aiDifficulty.slice(1)})`;
+            } else {
+                p2Name = p2Name || 'Player 2';
+            }
 
             playerNames[1] = p1Name;
             playerNames[2] = p2Name;
@@ -567,8 +657,12 @@
             // Show game elements
             document.getElementById('player-setup').style.display = 'none';
             document.getElementById('scoreboard').style.display = 'block';
+            document.getElementById('game-info-display').style.display = 'block';
             document.getElementById('game-status').style.display = 'block';
             document.getElementById('board').style.display = 'grid';
+
+            // Update game info display
+            document.getElementById('board-info').textContent = `${boardWidth}×${boardHeight} Board | Connect ${winLength}`;
 
             createBoard();
             resetBoard();
@@ -610,7 +704,11 @@
 
                     // Add click handler
                     cell.addEventListener('click', () => {
-                        dropPiece(col);
+                        // Only allow human moves (prevent clicking during AI turn)
+                        if (gameMode === 'human-vs-human' ||
+                            (gameMode === 'human-vs-computer' && currentPlayer === 1 && !isAIThinking)) {
+                            dropPiece(col);
+                        }
                     });
 
                     boardElement.appendChild(cell);
@@ -628,6 +726,7 @@
             board = Array(boardHeight).fill().map(() => Array(boardWidth).fill(0));
             currentPlayer = 1;
             gameActive = true;
+            isAIThinking = false;
 
             // Clear all pieces from board
             document.querySelectorAll('.cell').forEach(cell => {
@@ -635,11 +734,19 @@
             });
 
             updateStatus(`${playerNames[currentPlayer]}'s Turn`);
+
+            // If AI goes first (though in current setup, human is always player 1)
+            if (gameMode === 'human-vs-computer' && currentPlayer === 2) {
+                makeAIMove();
+            }
         }
 
         // Drop piece with gravity simulation
         function dropPiece(col) {
-            if (!gameActive || col < 0 || col >= boardWidth) return;
+            if (!gameActive || col < 0 || col >= boardWidth || isAIThinking) return;
+
+            // Check if column is full
+            if (board[0][col] !== 0) return;
 
             // Find the lowest empty row in this column
             for (let row = boardHeight - 1; row >= 0; row--) {
@@ -669,6 +776,11 @@
                     // Switch players
                     currentPlayer = currentPlayer === 1 ? 2 : 1;
                     updateStatus(`${playerNames[currentPlayer]}'s Turn`);
+
+                    // If it's now AI's turn, make AI move
+                    if (gameMode === 'human-vs-computer' && currentPlayer === 2 && gameActive) {
+                        makeAIMove();
+                    }
                     return;
                 }
             }
@@ -737,7 +849,19 @@
 
         // Update status display
         function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+            const statusElement = document.getElementById('status');
+            const boardElement = document.getElementById('board');
+
+            statusElement.textContent = message;
+
+            // Add AI thinking animation and disable board
+            if (message.includes('AI is thinking')) {
+                statusElement.classList.add('ai-thinking');
+                boardElement.classList.add('ai-turn');
+            } else {
+                statusElement.classList.remove('ai-thinking');
+                boardElement.classList.remove('ai-turn');
+            }
         }
 
         // Update scoreboard
@@ -745,6 +869,317 @@
             document.querySelector('#player1-score .score-value').textContent = scores[1];
             document.querySelector('#player2-score .score-value').textContent = scores[2];
         }
+
+        // AI LOGIC FUNCTIONS
+
+        // Make AI move
+        function makeAIMove() {
+            if (!gameActive || currentPlayer !== 2 || gameMode !== 'human-vs-computer') {
+                return;
+            }
+
+            isAIThinking = true;
+            updateStatus('🤖 AI is thinking...');
+
+            // Add thinking delay for better UX
+            setTimeout(() => {
+                try {
+                    const aiMove = getAIMove();
+                    console.log('AI chose column:', aiMove); // Debug log
+
+                    if (aiMove !== -1 && gameActive) {
+                        // Make the move manually instead of calling dropPiece to avoid recursion
+                        makeAIMoveInternal(aiMove);
+                    } else {
+                        console.error('AI could not find a valid move');
+                        // Fallback to random move
+                        const validCols = getValidColumns();
+                        if (validCols.length > 0) {
+                            makeAIMoveInternal(validCols[0]);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error in AI move:', error);
+                    // Reset thinking state on error
+                    isAIThinking = false;
+                    updateStatus(`${playerNames[currentPlayer]}'s Turn`);
+                }
+            }, 500 + Math.random() * 1000); // 0.5-1.5 second delay
+        }
+
+        // Internal AI move execution (to avoid recursion)
+        function makeAIMoveInternal(col) {
+            if (!gameActive || col < 0 || col >= boardWidth) {
+                isAIThinking = false;
+                return;
+            }
+
+            // Check if column is full
+            if (board[0][col] !== 0) {
+                isAIThinking = false;
+                return;
+            }
+
+            // Find the lowest empty row in this column
+            for (let row = boardHeight - 1; row >= 0; row--) {
+                if (board[row][col] === 0) {
+                    board[row][col] = currentPlayer;
+
+                    // Update visual
+                    const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+                    cell.classList.add(`player${currentPlayer}`);
+
+                    // Check for win
+                    if (checkWin(row, col)) {
+                        gameActive = false;
+                        scores[currentPlayer]++;
+                        updateScoreboard();
+                        updateStatus(`🎉 ${playerNames[currentPlayer]} Wins! 🎉`);
+                        isAIThinking = false;
+                        return;
+                    }
+
+                    // Check for draw
+                    if (checkDraw()) {
+                        gameActive = false;
+                        updateStatus("🤝 It's a Draw! 🤝");
+                        isAIThinking = false;
+                        return;
+                    }
+
+                    // Switch players
+                    currentPlayer = currentPlayer === 1 ? 2 : 1;
+                    isAIThinking = false;
+                    updateStatus(`${playerNames[currentPlayer]}'s Turn`);
+                    return;
+                }
+            }
+
+            // If we get here, something went wrong
+            isAIThinking = false;
+            updateStatus(`${playerNames[currentPlayer]}'s Turn`);
+        }
+
+        // Get AI move based on difficulty
+        function getAIMove() {
+            const validCols = getValidColumns();
+            console.log('Valid columns for AI:', validCols); // Debug log
+
+            if (validCols.length === 0) {
+                console.log('No valid columns available');
+                return -1;
+            }
+
+            let move = -1;
+            try {
+                switch (aiDifficulty) {
+                    case 'easy':
+                        move = getRandomMove(validCols);
+                        break;
+                    case 'medium':
+                        move = getMediumMove(validCols);
+                        break;
+                    case 'hard':
+                        move = getHardMove(validCols);
+                        break;
+                    default:
+                        move = getRandomMove(validCols);
+                }
+            } catch (error) {
+                console.error('Error in AI difficulty logic:', error);
+                move = getRandomMove(validCols);
+            }
+
+            console.log('AI selected move:', move); // Debug log
+            return move;
+        }
+
+        // Get valid columns (not full)
+        function getValidColumns() {
+            const valid = [];
+            for (let col = 0; col < boardWidth; col++) {
+                if (board[0][col] === 0) {
+                    valid.push(col);
+                }
+            }
+            return valid;
+        }
+
+        // Easy AI: Random moves
+        function getRandomMove(validCols) {
+            return validCols[Math.floor(Math.random() * validCols.length)];
+        }
+
+        // Medium AI: Block wins, try to win, otherwise random
+        function getMediumMove(validCols) {
+            // 1. Check if AI can win immediately
+            for (const col of validCols) {
+                if (canWinWithMove(col, 2)) {
+                    return col;
+                }
+            }
+
+            // 2. Check if AI needs to block human win
+            for (const col of validCols) {
+                if (canWinWithMove(col, 1)) {
+                    return col;
+                }
+            }
+
+            // 3. Prefer center columns
+            const centerCols = validCols.filter(col => {
+                const center = Math.floor(boardWidth / 2);
+                return Math.abs(col - center) <= 1;
+            });
+
+            if (centerCols.length > 0) {
+                return centerCols[Math.floor(Math.random() * centerCols.length)];
+            }
+
+            // 4. Random valid move
+            return getRandomMove(validCols);
+        }
+
+        // Hard AI: Advanced strategy
+        function getHardMove(validCols) {
+            try {
+                // 1. Check if AI can win immediately
+                for (const col of validCols) {
+                    if (canWinWithMove(col, 2)) {
+                        return col;
+                    }
+                }
+
+                // 2. Check if AI needs to block human win
+                for (const col of validCols) {
+                    if (canWinWithMove(col, 1)) {
+                        return col;
+                    }
+                }
+
+                // 3. Look for moves that create multiple threats
+                let bestCol = -1;
+                let bestScore = -1;
+
+                for (const col of validCols) {
+                    try {
+                        const score = evaluateMove(col, 2);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestCol = col;
+                        }
+                    } catch (error) {
+                        console.error(`Error evaluating move for column ${col}:`, error);
+                    }
+                }
+
+                return bestCol !== -1 ? bestCol : getRandomMove(validCols);
+            } catch (error) {
+                console.error('Error in hard AI logic:', error);
+                return getRandomMove(validCols);
+            }
+        }
+
+        // Check if a move would result in a win
+        function canWinWithMove(col, player) {
+            // Find where the piece would land
+            for (let row = boardHeight - 1; row >= 0; row--) {
+                if (board[row][col] === 0) {
+                    // Temporarily place the piece
+                    board[row][col] = player;
+                    const canWin = checkWin(row, col);
+                    // Remove the piece
+                    board[row][col] = 0;
+                    return canWin;
+                }
+            }
+            return false;
+        }
+
+        // Evaluate how good a move is (for hard AI)
+        function evaluateMove(col, player) {
+            // Bounds check
+            if (col < 0 || col >= boardWidth) return -1000;
+
+            let score = 0;
+
+            // Find where the piece would land
+            let targetRow = -1;
+            for (let row = boardHeight - 1; row >= 0; row--) {
+                if (board[row][col] === 0) {
+                    targetRow = row;
+                    break;
+                }
+            }
+
+            if (targetRow === -1) return -100; // Column full
+
+            try {
+                // Temporarily place the piece
+                board[targetRow][col] = player;
+
+                // Center preference (simple scoring)
+                const center = Math.floor(boardWidth / 2);
+                score += Math.max(0, boardWidth - Math.abs(col - center)) * 2;
+
+                // Count immediate connections (simplified)
+                score += countSimpleConnections(targetRow, col, player) * 3;
+
+                // Remove the temporary piece
+                board[targetRow][col] = 0;
+            } catch (error) {
+                // If anything goes wrong, remove the piece and return low score
+                if (targetRow !== -1) {
+                    board[targetRow][col] = 0;
+                }
+                console.error('Error in evaluateMove:', error);
+                return -50;
+            }
+
+            return score;
+        }
+
+        // Simplified connection counting (safer version)
+        function countSimpleConnections(row, col, player) {
+            let total = 0;
+            const directions = [[0,1], [1,0], [1,1], [1,-1]];
+
+            for (const [dr, dc] of directions) {
+                let count = 0;
+
+                // Count in positive direction (limited to prevent infinite loops)
+                let r = row + dr, c = col + dc;
+                for (let i = 0; i < winLength && r >= 0 && r < boardHeight && c >= 0 && c < boardWidth; i++) {
+                    if (board[r][c] === player) {
+                        count++;
+                        r += dr;
+                        c += dc;
+                    } else {
+                        break;
+                    }
+                }
+
+                // Count in negative direction (limited to prevent infinite loops)
+                r = row - dr;
+                c = col - dc;
+                for (let i = 0; i < winLength && r >= 0 && r < boardHeight && c >= 0 && c < boardWidth; i++) {
+                    if (board[r][c] === player) {
+                        count++;
+                        r -= dr;
+                        c -= dc;
+                    } else {
+                        break;
+                    }
+                }
+
+                total += count;
+            }
+
+            return Math.min(total, 10); // Cap the score to prevent overflow
+        }
+
+        // Removed complex threat analysis functions that were causing issues
+        // The AI now uses simpler, more reliable logic
 
         // Add click handlers to cells (will be added when board is created)
         function addClickHandlers() {
@@ -756,9 +1191,39 @@
             });
         }
 
+        // Update win length options based on board size
+        function updateWinLengthOptions() {
+            const width = parseInt(document.getElementById('board-width').value);
+            const height = parseInt(document.getElementById('board-height').value);
+            const maxDimension = Math.max(width, height);
+            const winLengthSelect = document.getElementById('win-length');
+            const currentValue = parseInt(winLengthSelect.value);
+
+            // Clear existing options
+            winLengthSelect.innerHTML = '';
+
+            // Add valid options (3 up to max dimension)
+            for (let i = 3; i <= Math.min(maxDimension, 8); i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = `${i} in a row`;
+                if (i === currentValue && i <= maxDimension) {
+                    option.selected = true;
+                } else if (i === 4 && (currentValue > maxDimension || !currentValue)) {
+                    option.selected = true;
+                }
+                winLengthSelect.appendChild(option);
+            }
+        }
+
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            addClickHandlers();
+            // Update win length options on board size change
+            document.getElementById('board-width').addEventListener('change', updateWinLengthOptions);
+            document.getElementById('board-height').addEventListener('change', updateWinLengthOptions);
+
+            // Initialize win length options
+            updateWinLengthOptions();
 
             // Allow Enter key to start game
             document.addEventListener('keypress', (e) => {
